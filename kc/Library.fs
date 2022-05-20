@@ -1,6 +1,4 @@
 ﻿namespace kc
 
-module Say =
-    let hello name =
-        printfn "Hello %s" name
-
+module parser = 
+    begin end
