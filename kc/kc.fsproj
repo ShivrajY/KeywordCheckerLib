@@ -1,19 +1,16 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
-
   <ItemGroup>
     <Compile Include="Library.fs" />
+    <Compile Include="KeywordChecker.fsx" />
   </ItemGroup>
-
   <ItemGroup>
     <PackageReference Include="AngleSharp.Css" Version="0.16.4" />
     <PackageReference Include="AngleSharp.io" Version="0.16.0" />
     <PackageReference Include="AngleSharp.js" Version="0.15.0" />
     <PackageReference Include="FSharp.Data" Version="4.2.8" />
   </ItemGroup>
-
 </Project>

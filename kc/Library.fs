@@ -2,41 +2,31 @@
 
 open System
 open System.Threading
-open System.Threading.Tasks
 open FSharp.Data
 open FSharp.Data.CsvExtensions
 open AngleSharp
-open AngleSharp.Css
-open AngleSharp.Js
 open AngleSharp.Io
-open AngleSharp.Html.Parser
 
 let getCsvObject (csvFile: string) =
     async {
         if (String.IsNullOrEmpty(csvFile)) then
             return! failwith "No file specified"
         else
-            return! (CsvFile.AsyncLoad(csvFile))
+            return! (CsvFile.AsyncLoad(csvFile, ignoreErrors = true))
     }
-
+//"companyhomepageurl"
 let getWebsitesLinks (columnName: string) (csvFile: CsvFile) =
     async {
-        let cn =
-            if (String.IsNullOrEmpty(columnName)) then
-                "companyhomepageurl"
-            else
-                columnName
-
         let websites =
             csvFile.Rows
             |> Seq.map (fun row ->
-                let website = row?cn
+                let website = row?columnName
 
                 match (Uri.TryCreate(website, UriKind.Absolute)) with
                 | true, uri -> uri.ToString()
                 | false, _ -> $"https://www.{website}")
 
-        return websites
+        return websites |> Set.ofSeq
     }
 
 let htmlRequester = new DefaultHttpRequester()
@@ -53,7 +43,7 @@ let config =
         .WithCss()
         .WithJs()
 
-let getHtmlDocument (website: string, cancellationToken: CancellationToken) =
+let checkWords (words: Set<string>) (cancellationToken: CancellationToken) (website: string) =
     async {
         use context = BrowsingContext.New(config)
 
@@ -61,6 +51,42 @@ let getHtmlDocument (website: string, cancellationToken: CancellationToken) =
             context.OpenAsync(website, cancellationToken)
             |> Async.AwaitTask
 
-        return doc
+        let html =
+            if not (String.IsNullOrEmpty(doc.DocumentElement.TextContent)) then
+                doc.DocumentElement.TextContent
+            else if not (String.IsNullOrEmpty(doc.Body.OuterHtml)) then
+                doc.Body.OuterHtml
+            else
+                ""
+
+        return
+            words
+            |> Set.map (fun word ->
+                html
+                    .ToLowerInvariant()
+                    .Contains(word.ToLowerInvariant()),
+                word)
+            |> Set.fold
+                (fun (acc: string) (x: bool * string) ->
+                    let t, w = x
+                    if (t) then $"{acc},{w}" else acc)
+                String.Empty
     }
+
+let c =
+    getCsvObject "/Users/shiv/Projects/kc/SeedList.csv"
+    |> Async.RunSynchronously
+    |> getWebsitesLinks "companyhomepageurl"
+    |> Async.RunSynchronously
+
+let words =
+    set [ "Contact"
+          "Demo"
+          "Contact Sales"
+          "Talk to Sales"
+          "Talk to an Expert" ]
+
+let check site =
+    Seq.map (fun ww -> checkWords words (CancellationToken.None) site)
+
 //"Demo" OR "Contact Sales" OR "Talk to Sales" OR "Talk to an Expert"

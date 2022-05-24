@@ -7,30 +7,11 @@ open System
 open System.Text
 open System.Linq
 open FSharp.Data
-open AngleSharp.Js
 open System.Threading
 open AngleSharp
-open AngleSharp.Dom
 open AngleSharp.Io
 open System.Net
-open System.Net.Security
-
-ServicePointManager.DefaultConnectionLimit <- 100
-ServicePointManager.ServerCertificateValidationCallback <- (fun _ _ _ _ -> true)
-
-let r =
-    new DefaultHttpRequester("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:100.0) Gecko/20100101 Firefox/100.0")
-
-r.Timeout <- TimeSpan.FromSeconds(60)
-
-let config =
-    Configuration
-        .Default
-        .WithRequester(r)
-        .WithDefaultLoader(LoaderOptions(IsResourceLoadingEnabled = true))
-        .WithJs()
-        .WithEventLoop()
-
+(******************************************************************************)
 let columnName = "companyhomepageurl"
 
 let words =
@@ -41,6 +22,17 @@ let words =
           "Talk to an Expert" ]
 
 (*******************************************************************************)
+let tick = "\u2713"
+let cross = "\u1763"
+ServicePointManager.DefaultConnectionLimit <- 5
+ServicePointManager.ServerCertificateValidationCallback <- (fun _ _ _ _ -> true)
+
+let r =
+    new DefaultHttpRequester("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:100.0) Gecko/20100101 Firefox/100.0")
+
+r.Timeout <- TimeSpan.FromSeconds(30)
+
+let config = Configuration.Default.WithDefaultLoader()
 
 let color = Console.ForegroundColor
 let quote = '"'
@@ -48,34 +40,11 @@ Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 
 let args = fsi.CommandLineArgs |> Array.tail
 
-type RequestGate(n: int) =
-    let semaphore = new Semaphore(initialCount = n, maximumCount = n)
-
-    member _.AcquireAsync(?timeout) =
-        async {
-            let! ok = Async.AwaitWaitHandle(semaphore, ?millisecondsTimeout = timeout)
-
-            if ok then
-                return
-                    { new IDisposable with
-                        member x.Dispose() = semaphore.Release() |> ignore }
-            else
-                return! failwith "Semaphore couldn't be aquired..."
-
-        }
-
-let webRequestGate = RequestGate(20)
-
 let fetchUrl (url: string) =
     async {
-        use! gate = webRequestGate.AcquireAsync()
-
         try
             use! doc =
-                BrowsingContext
-                    .New(config)
-                    .OpenAsync(url)
-                    .WaitUntilAvailable()
+                BrowsingContext.New(config).OpenAsync(url)
                 |> Async.AwaitTask
 
             return doc.ToHtml()
@@ -107,6 +76,7 @@ let createUrl (link: string) =
         $"http://{link}"
 
 let mutable counter = 0
+let locker = obj ()
 
 let findWords (csv: CsvFile) (newFile: string) =
     counter <- 0
@@ -142,16 +112,31 @@ let findWords (csv: CsvFile) (newFile: string) =
                             let s = x.Trim(quote)
                             String.Format("{0}{1}{0}", quote, s))
 
-                    printf "Processing: "
-                    Console.ForegroundColor <- ConsoleColor.Magenta
-                    printf "%-s" website
-                    printf "%-s" " "
-                    Console.ForegroundColor <- color
-                    let cnt = Interlocked.Increment(&counter)
-                    Console.ForegroundColor <- ConsoleColor.Yellow
-                    printf "%-d/%-d" cnt totalRows
-                    Console.ForegroundColor <- color
-                    Console.WriteLine()
+                    lock locker (fun _ ->
+                        let c, symbol =
+                            if not (String.IsNullOrWhiteSpace(words.Trim('\"'))) then
+                                ConsoleColor.DarkGreen, tick
+                            else
+                                ConsoleColor.DarkRed, cross
+
+                        Console.ForegroundColor <- c
+                        printf "Found %s " symbol
+                        Console.ForegroundColor <- color
+                        printf "Processed:"
+                        let cnt = Interlocked.Increment(&counter)
+
+                        Console.ForegroundColor <- ConsoleColor.Yellow
+                        printf "%3d/%3d" cnt totalRows
+                        Console.ForegroundColor <- color
+
+                        Console.ForegroundColor <- ConsoleColor.Magenta
+                        printf "  %-s" website
+                        Console.ForegroundColor <- color
+
+                        Console.ForegroundColor <- ConsoleColor.DarkGray
+                        printf " %-s" words
+                        Console.ForegroundColor <- color
+                        Console.WriteLine())
 
                     let str = String.Join(seperators, arr)
                     return index, str
