@@ -5,6 +5,7 @@
 
 open System
 open System.Text
+open System.Text.RegularExpressions
 open System.Linq
 open FSharp.Data
 open System.Threading
@@ -26,6 +27,7 @@ let tick = "\u2713"
 let cross = "\u1763"
 ServicePointManager.DefaultConnectionLimit <- 5
 ServicePointManager.ServerCertificateValidationCallback <- (fun _ _ _ _ -> true)
+let wordBoundary = @"\b"
 
 let r =
     new DefaultHttpRequester("Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:100.0) Gecko/20100101 Firefox/100.0")
@@ -40,6 +42,28 @@ Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 
 let args = fsi.CommandLineArgs |> Array.tail
 
+let getLanguage (html: string) =
+    async {
+        try
+            let doc = HtmlDocument.Parse(html)
+
+            let attr =
+                doc.CssSelect("html")
+                |> List.choose (fun x ->
+                    x.TryGetAttribute("lang")
+                    |> Option.map (fun a -> a.Value().Trim()))
+
+            let lang =
+                match attr with
+                | [ x ] -> x
+                | [] -> ""
+                | _ -> String.Join(",", (attr |> Set.ofSeq))
+
+            return $"{quote}{lang}{quote}"
+        with
+        | _ -> return ""
+    }
+
 let fetchUrl (url: string) =
     async {
         try
@@ -53,12 +77,22 @@ let fetchUrl (url: string) =
     }
 
 let checkWords (html: string) =
+    // let wordsFound =
+    //     words
+    //     |> Set.filter (fun word ->
+    //         html
+    //             .ToLowerInvariant()
+    //             .Contains(word.ToLowerInvariant()))
+
     let wordsFound =
         words
         |> Set.filter (fun word ->
-            html
-                .ToLowerInvariant()
-                .Contains(word.ToLowerInvariant()))
+            Regex.IsMatch(
+                html,
+                $"{wordBoundary}{word}{wordBoundary}",
+                RegexOptions.IgnoreCase
+                ||| RegexOptions.Singleline
+            ))
 
     String.Format("{0}{1}{0}", quote, (String.Join(", ", wordsFound)))
 
@@ -85,7 +119,7 @@ let findWords (csv: CsvFile) (newFile: string) =
 
     let headers =
         match csv.Headers with
-        | Some h -> [| "keywords"; yield! h |]
+        | Some h -> [| "keywords"; "language"; yield! h |]
         | None -> [||]
 
 
@@ -105,9 +139,12 @@ let findWords (csv: CsvFile) (newFile: string) =
                     let url = createUrl (website)
                     let! html = fetchUrl (url)
                     let words = checkWords (html)
+                    let! language = getLanguage (html)
 
                     let arr =
-                        [| words; yield! row.Columns |]
+                        [| words
+                           language
+                           yield! row.Columns |]
                         |> Array.map (fun x ->
                             let s = x.Trim(quote)
                             String.Format("{0}{1}{0}", quote, s))
@@ -131,6 +168,10 @@ let findWords (csv: CsvFile) (newFile: string) =
 
                         Console.ForegroundColor <- ConsoleColor.Magenta
                         printf "  %-s" website
+                        Console.ForegroundColor <- color
+
+                        Console.ForegroundColor <- ConsoleColor.DarkCyan
+                        printf " %-s" language
                         Console.ForegroundColor <- color
 
                         Console.ForegroundColor <- ConsoleColor.DarkGray

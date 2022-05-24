@@ -88,12 +88,13 @@ let getLanguage (html: string) =
                 doc.CssSelect("html")
                 |> List.choose (fun x ->
                     x.TryGetAttribute("lang")
-                    |> Option.map (fun a -> a.Value()))
+                    |> Option.map (fun a -> a.Value().Trim()))
 
             let lang =
                 match attr with
+                | [ x ] -> x
                 | [] -> ""
-                | _ -> String.Join(",", attr)
+                | _ -> String.Join(",", (attr |> Set.ofSeq))
 
             return $"{quote}{lang}{quote}"
         with
@@ -121,12 +122,6 @@ let fetchUrl (browser: Browser) (url: string) =
     }
 
 let checkWords (html: string) =
-    // let wordsFound =
-    //     words
-    //     |> Set.filter (fun word ->
-    //         html
-    //             .ToLowerInvariant()
-    //             .Contains(word.ToLowerInvariant()))
     let wordsFound =
         words
         |> Set.filter (fun word ->
@@ -162,7 +157,7 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
 
     let headers =
         match csv.Headers with
-        | Some h -> [| "keywords"; yield! h |]
+        | Some h -> [| "keywords"; "language"; yield! h |]
         | None -> [||]
 
     let seed =
@@ -181,9 +176,12 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
                     let url = createUrl (website)
                     let! html = fetchUrl browser (url)
                     let words = checkWords (html)
+                    let! language = getLanguage (html)
 
                     let arr =
-                        [| words; yield! row.Columns |]
+                        [| words
+                           language
+                           yield! row.Columns |]
                         |> Array.map (fun x ->
                             let s = x.Trim(quote)
                             String.Format("{0}{1}{0}", quote, s))
@@ -209,9 +207,14 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
                         printf "  %-s" website
                         Console.ForegroundColor <- color
 
+                        Console.ForegroundColor <- ConsoleColor.DarkCyan
+                        printf " %-s" language
+                        Console.ForegroundColor <- color
+
                         Console.ForegroundColor <- ConsoleColor.DarkGray
                         printf " %-s" words
                         Console.ForegroundColor <- color
+
                         Console.WriteLine())
 
                     let str = String.Join(seperators, arr)
@@ -235,7 +238,6 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
     Console.ForegroundColor <- color
 
 let work () =
-
     match args with
     | [||] -> printfn "Please provide a file name"
     | _ ->
