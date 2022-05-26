@@ -76,8 +76,8 @@ let SetUpChromeAndGetBrowser () =
 
         if not (String.IsNullOrEmpty(executablePath)) then
             Console.WriteLine($"Attemping to start Chromium using executable path: {executablePath}")
-            let options = new LaunchOptions(Headless = true, ExecutablePath = executablePath)
-            //let options = new LaunchOptions(Headless = false, ExecutablePath = executablePath)
+            //let options = new LaunchOptions(Headless = true, ExecutablePath = executablePath)
+            let options = new LaunchOptions(Headless = false, ExecutablePath = executablePath)
             return! Puppeteer.LaunchAsync(options) |> Async.AwaitTask
         else
             return! failwith "Couldn't find Chromium executable"
@@ -115,7 +115,28 @@ let parseData (html: string) (inputsToParse: InputToParse list) =
         let parser = context.GetService<IHtmlParser>()
         use! doc = parser.ParseDocumentAsync(html) |> Async.AwaitTask
 
-        return [| "" |]
+        let data =
+            inputsToParse
+            |> List.map (fun input ->
+                match input with
+                | Attribute (tag, attribute) ->
+                    let a = doc.QuerySelector($"{tag}[{attribute}]")
+
+                    if (a = null) then
+                        String.Empty
+                    else
+                        let v = a.GetAttribute(attribute)
+                        if (v = null) then String.Empty else v
+                | Meta (name) ->
+                    let m = doc.QuerySelector($"meta[name={quote}{name}{quote}]")
+
+                    if (m = null) then
+                        String.Empty
+                    else
+                        let v = m.GetAttribute("content")
+                        if (v = null) then String.Empty else v)
+
+        return data
     }
 
 let fetchUrl (browser: Browser) (url: string) =
@@ -174,7 +195,11 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
 
     let headers =
         match csv.Headers with
-        | Some h -> [| "keywords"; "language"; yield! h |]
+        | Some h ->
+            [| "keywords"
+               "language"
+               "meta-description"
+               yield! h |]
         | None -> [||]
 
     let seed =
@@ -194,10 +219,18 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
                     let! html = fetchUrl browser (url)
                     let words = checkWords (html)
                     let! language = getLanguage (html)
+                    let! data = parseData (html) (pageLanguage :: metaDescription :: [])
+
+                    let pl, metaDescription =
+                        match data with
+                        | l :: d :: [] when l = String.Empty -> language, d
+                        | [ lang; desc ] -> lang, desc
+                        | _ -> language, ""
 
                     let arr =
                         [| words
-                           language
+                           pl
+                           metaDescription
                            yield! row.Columns |]
                         |> Array.map (fun x ->
                             let s = x.Trim(quote)
@@ -216,7 +249,7 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
                         printf "Processed:"
                         let cnt = Interlocked.Increment(&counter)
 
-                        Console.ForegroundColor <- ConsoleColor.Yellow
+                        Console.ForegroundColor <- ConsoleColor.DarkYellow
                         printf "%3d/%3d" cnt totalRows
                         Console.ForegroundColor <- color
 
@@ -229,6 +262,10 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
                         Console.ForegroundColor <- color
 
                         Console.ForegroundColor <- ConsoleColor.DarkGray
+                        printf " %-s" words
+                        Console.ForegroundColor <- color
+
+                        Console.ForegroundColor <- ConsoleColor.Gray
                         printf " %-s" words
                         Console.ForegroundColor <- color
 
