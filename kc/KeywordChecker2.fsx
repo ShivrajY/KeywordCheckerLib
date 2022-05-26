@@ -76,8 +76,8 @@ let SetUpChromeAndGetBrowser () =
 
         if not (String.IsNullOrEmpty(executablePath)) then
             Console.WriteLine($"Attemping to start Chromium using executable path: {executablePath}")
-            //let options = new LaunchOptions(Headless = true, ExecutablePath = executablePath)
-            let options = new LaunchOptions(Headless = false, ExecutablePath = executablePath)
+            let options = new LaunchOptions(Headless = true, ExecutablePath = executablePath)
+            //let options = new LaunchOptions(Headless = false, ExecutablePath = executablePath)
             return! Puppeteer.LaunchAsync(options) |> Async.AwaitTask
         else
             return! failwith "Couldn't find Chromium executable"
@@ -223,9 +223,10 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
 
                     let pl, metaDescription =
                         match data with
-                        | l :: d :: [] when l = String.Empty -> language, d
-                        | [ lang; desc ] -> lang, desc
-                        | _ -> language, ""
+                        | l :: d :: [] when String.IsNullOrWhiteSpace(l) ->
+                            language, $"{quote}{d.Replace(',', ' ')}{quote}"
+                        | [ lang; desc ] -> lang, $"{quote}{desc.Replace(',', ' ')}{quote}"
+                        | _ -> language, String.Empty
 
                     let arr =
                         [| words
@@ -266,7 +267,7 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
                         Console.ForegroundColor <- color
 
                         Console.ForegroundColor <- ConsoleColor.Gray
-                        printf " %-s" words
+                        printf " %-s" metaDescription
                         Console.ForegroundColor <- color
 
                         Console.WriteLine())
