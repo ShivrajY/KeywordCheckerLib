@@ -77,13 +77,6 @@ let fetchUrl (url: string) =
     }
 
 let checkWords (html: string) =
-    // let wordsFound =
-    //     words
-    //     |> Set.filter (fun word ->
-    //         html
-    //             .ToLowerInvariant()
-    //             .Contains(word.ToLowerInvariant()))
-
     let wordsFound =
         words
         |> Set.filter (fun word ->
@@ -121,7 +114,6 @@ let findWords (csv: CsvFile) (newFile: string) =
         match csv.Headers with
         | Some h -> [| "keywords"; "language"; yield! h |]
         | None -> [||]
-
 
     let seed =
         (StringBuilder())

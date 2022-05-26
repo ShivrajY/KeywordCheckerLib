@@ -8,6 +8,7 @@
     <Compile Include="KeywordChecker.fsx" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="anglesharp" Version="0.16.1" />
     <PackageReference Include="AngleSharp.Css" Version="0.16.4" />
     <PackageReference Include="AngleSharp.io" Version="0.16.0" />
     <PackageReference Include="AngleSharp.js" Version="0.15.0" />

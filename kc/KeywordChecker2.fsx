@@ -1,5 +1,6 @@
 #r "nuget: FSharp.Data"
 #r "nuget: PuppeteerSharp"
+#r "nuget: AngleSharp"
 
 open System
 open System.Text
@@ -7,9 +8,12 @@ open System.Text.RegularExpressions
 open System.Linq
 open FSharp.Data
 open System.Threading
-open System.Net
 open PuppeteerSharp
 open System.IO
+open AngleSharp
+open AngleSharp.Dom
+open AngleSharp.Io
+open AngleSharp.Html.Parser
 (******************************************************************************)
 let columnName = "companyhomepageurl"
 
@@ -50,6 +54,8 @@ Environment.CurrentDirectory <- __SOURCE_DIRECTORY__
 let currentDirectory = __SOURCE_DIRECTORY__
 let downloadPath = Path.Combine(currentDirectory, "Chromium")
 
+let config = Configuration.Default.WithDefaultLoader()
+
 let SetUpChromeAndGetBrowser () =
     async {
         Console.WriteLine($"Attemping to set up puppeteer to use Chromium found under directory {downloadPath} ")
@@ -81,24 +87,35 @@ let args = fsi.CommandLineArgs |> Array.tail
 
 let getLanguage (html: string) =
     async {
-        try
-            let doc = HtmlDocument.Parse(html)
+        //try
+        let m =
+            Regex.Match(
+                html,
+                "lang=\"(.*?)\"",
+                RegexOptions.IgnoreCase
+                ||| RegexOptions.Singleline
+            )
 
-            let attr =
-                doc.CssSelect("html")
-                |> List.choose (fun x ->
-                    x.TryGetAttribute("lang")
-                    |> Option.map (fun a -> a.Value().Trim()))
+        if (m.Success) then
+            return m.Groups[1].Value
+        else
+            return ""
+    }
 
-            let lang =
-                match attr with
-                | [ x ] -> x
-                | [] -> ""
-                | _ -> String.Join(",", (attr |> Set.ofSeq))
+type InputToParse =
+    | Attribute of tag: string * attribute: string
+    | Meta of name: string
 
-            return $"{quote}{lang}{quote}"
-        with
-        | _ -> return ""
+let pageLanguage = Attribute(tag = "html", attribute = "lang")
+let metaDescription = Meta(name = "description")
+
+let parseData (html: string) (inputsToParse: InputToParse list) =
+    async {
+        use context = BrowsingContext.New(config)
+        let parser = context.GetService<IHtmlParser>()
+        use! doc = parser.ParseDocumentAsync(html) |> Async.AwaitTask
+
+        return [| "" |]
     }
 
 let fetchUrl (browser: Browser) (url: string) =
