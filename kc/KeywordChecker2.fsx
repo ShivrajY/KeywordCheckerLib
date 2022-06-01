@@ -11,8 +11,6 @@ open System.Threading
 open PuppeteerSharp
 open System.IO
 open AngleSharp
-open AngleSharp.Dom
-open AngleSharp.Io
 open AngleSharp.Html.Parser
 (******************************************************************************)
 let columnName = "companyhomepageurl"
@@ -42,7 +40,7 @@ type RequestGate(n: int) =
         }
 
 // How many pages at a time?
-let numberOfPages = 3
+let numberOfPages = 5
 
 let webRequestGate = RequestGate(numberOfPages)
 
@@ -308,10 +306,10 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
                     return index, str
                 with
                 | _ -> return index, String.Empty
-            })
+            } // async
+        ) // mapi
 
     let results = tasks |> Async.Parallel |> Async.RunSynchronously
-
     browser.CloseAsync() |> ignore
 
     let sortedResult = results |> Array.sortBy fst |> Array.map snd
