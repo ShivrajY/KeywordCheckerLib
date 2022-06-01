@@ -266,7 +266,7 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
                         printf " %-s" words
                         Console.ForegroundColor <- color
 
-                        Console.ForegroundColor <- ConsoleColor.Gray
+                        Console.ForegroundColor <- ConsoleColor.Yellow
                         printf " %-s" metaDescription
                         Console.ForegroundColor <- color
 
