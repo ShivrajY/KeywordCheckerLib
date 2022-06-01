@@ -41,7 +41,10 @@ type RequestGate(n: int) =
 
         }
 
-let webRequestGate = RequestGate(3)
+// How many pages at a time?
+let numberOfPages = 3
+
+let webRequestGate = RequestGate(numberOfPages)
 
 let tick = "\u2713"
 let cross = "\u1763"
@@ -56,6 +59,9 @@ let downloadPath = Path.Combine(currentDirectory, "Chromium")
 
 let config = Configuration.Default.WithDefaultLoader()
 
+///<summary>
+/// Setup PuppeteerSharp
+///</summary>
 let SetUpChromeAndGetBrowser () =
     async {
         Console.WriteLine($"Attemping to set up puppeteer to use Chromium found under directory {downloadPath} ")
@@ -83,8 +89,14 @@ let SetUpChromeAndGetBrowser () =
             return! failwith "Couldn't find Chromium executable"
     }
 
+///<summary>
+/// Commandline arguments
+/// </summary>
 let args = fsi.CommandLineArgs |> Array.tail
 
+///<summary>
+/// Get language using regular RegularExpressions
+/// </summary>
 let getLanguage (html: string) =
     async {
         //try
@@ -102,6 +114,9 @@ let getLanguage (html: string) =
             return ""
     }
 
+///<summary>
+/// Inputs to be parsed data type
+/// </summary>
 type InputToParse =
     | Attribute of tag: string * attribute: string
     | Meta of name: string
@@ -109,6 +124,10 @@ type InputToParse =
 let pageLanguage = Attribute(tag = "html", attribute = "lang")
 let metaDescription = Meta(name = "description")
 
+/// <summary>
+/// Parses the input to determine the language of the page as well as
+/// meta description
+/// </summary>
 let parseData (html: string) (inputsToParse: InputToParse list) =
     async {
         use context = BrowsingContext.New(config)
@@ -139,39 +158,56 @@ let parseData (html: string) (inputsToParse: InputToParse list) =
         return data
     }
 
+/// <summary>
+/// Get DOM Html from chrome browser
+/// </summary>
 let fetchUrl (browser: Browser) (url: string) =
     async {
         try
-            use! holder = webRequestGate.AcquireAsync()
-            use! page = browser.NewPageAsync() |> Async.AwaitTask
+            if not (String.IsNullOrWhiteSpace(url)) then
+                use! holder = webRequestGate.AcquireAsync()
+                use! page = browser.NewPageAsync() |> Async.AwaitTask
 
-            do!
-                page.GoToAsync(url, waitUntil = [| WaitUntilNavigation.Networkidle0 |])
-                |> Async.AwaitTask
-                |> Async.Ignore
+                do!
+                    page.GoToAsync(url, waitUntil = [| WaitUntilNavigation.Networkidle0 |])
+                    |> Async.AwaitTask
+                    |> Async.Ignore
 
-            let! html =
-                page.EvaluateExpressionAsync("document.documentElement.outerHTML")
-                |> Async.AwaitTask
+                let! html =
+                    page.EvaluateExpressionAsync("document.documentElement.outerHTML")
+                    |> Async.AwaitTask
 
-            return html.ToString()
+                return html.ToString()
+            else
+                return String.Empty
         with
         | _ -> return String.Empty
     }
 
+/// <summary>
+/// Check the presence of the word in document
+/// </summary>
 let checkWords (html: string) =
-    let wordsFound =
-        words
-        |> Set.filter (fun word ->
-            Regex.IsMatch(
-                html,
-                $"{wordBoundary}{word}{wordBoundary}",
-                RegexOptions.IgnoreCase
-                ||| RegexOptions.Singleline
-            ))
+    async {
+        if (String.IsNullOrWhiteSpace(html)) then
+            let wordsFound =
+                words
+                |> Set.filter (fun word ->
+                    Regex.IsMatch(
+                        html,
+                        $"{wordBoundary}{word}{wordBoundary}",
+                        RegexOptions.IgnoreCase
+                        ||| RegexOptions.Singleline
+                    ))
 
-    String.Format("{0}{1}{0}", quote, (String.Join(", ", wordsFound)))
+            return String.Format("{0}{1}{0}", quote, (String.Join(", ", wordsFound)))
+        else
+            return "\"\""
+    }
 
+/// <summary>
+/// Create CSV object from csv file
+/// </summary>
 let createCsv file =
     if (String.IsNullOrEmpty(file)) then
         failwith "File name is empty"
@@ -179,15 +215,12 @@ let createCsv file =
         let csv = CsvFile.Load(file, ignoreErrors = true)
         csv
 
-let createUrl (link: string) =
-    if (link.StartsWith("http")) then
-        link
-    else
-        $"http://{link}"
-
 let mutable counter = 0
 let locker = obj ()
 
+/// <summary>
+/// Main function to find words
+/// </summary>
 let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
     counter <- 0
     let listOfRows = csv.Rows |> List.ofSeq
@@ -214,10 +247,9 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
         |> List.mapi (fun index row ->
             async {
                 try
-                    let website = row[columnName]
-                    let url = createUrl (website)
-                    let! html = fetchUrl browser (url)
-                    let words = checkWords (html)
+                    let website = row[ columnName ].Trim()
+                    let! html = fetchUrl browser website
+                    let! words = checkWords (html)
                     let! language = getLanguage (html)
                     let! data = parseData (html) (pageLanguage :: metaDescription :: [])
 
@@ -292,6 +324,9 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
     printfn $"Saved File: {newFile}"
     Console.ForegroundColor <- color
 
+/// <summary>
+/// Work begins here!
+/// </summary>
 let work () =
     match args with
     | [||] -> printfn "Please provide a file name"
