@@ -93,6 +93,31 @@ let SetUpChromeAndGetBrowser () =
 //Arguments
 let args = fsi.CommandLineArgs |> Array.tail
 
+//----------- Mx Records --------------
+let lookupOptions = new LookupClientOptions()
+lookupOptions.ContinueOnDnsError <- true
+let client = new LookupClient(lookupOptions)
+
+let mxExchange (client: LookupClient) (hostName: string) =
+    async {
+        if not (String.IsNullOrEmpty(hostName)) then
+            let! r =
+                client.QueryAsync(hostName, QueryType.MX)
+                |> Async.AwaitTask
+
+            return
+                r
+                    .Answers
+                    .MxRecords()
+                    .OrderBy(fun x -> x.Preference)
+                |> Seq.tryHead
+                |> Option.map (fun x -> x.Exchange)
+        else
+            return None
+    }
+
+let getMxExchange = mxExchange client
+
 /// <summary>
 /// Setup the browser
 /// </summary>
@@ -268,6 +293,7 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
             [| "keywords"
                "language"
                "meta-description"
+               "mx-exchange"
                yield! h |]
         | None -> [||]
 
@@ -289,6 +315,7 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
                     let words = checkWords (html)
                     let! language = getLanguage (html)
                     let! data = parseData (html) (pageLanguage :: metaDescription :: [])
+                    let! mxRecord = getMxExchange website
 
                     let pl, metaDescription =
                         match data with
@@ -297,10 +324,16 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
                         | [ lang; desc ] -> lang, $"{quote}{desc.Replace(',', ' ')}{quote}"
                         | _ -> language, String.Empty
 
+                    let mxStr =
+                        match mxRecord with
+                        | Some x -> x.Value
+                        | None -> String.Empty
+
                     let arr =
                         [| words
                            pl
                            metaDescription
+                           mxStr
                            yield! row.Columns |]
                         |> Array.map (fun x ->
                             let s = x.Trim(quote)
@@ -321,22 +354,22 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
 
                         Console.ForegroundColor <- ConsoleColor.DarkYellow
                         printf "%3d/%3d" cnt totalRows
-                        Console.ForegroundColor <- color
 
                         Console.ForegroundColor <- ConsoleColor.Magenta
                         printf "  %-s" website
-                        Console.ForegroundColor <- color
 
                         Console.ForegroundColor <- ConsoleColor.DarkCyan
                         printf " %-s" language
-                        Console.ForegroundColor <- color
 
                         Console.ForegroundColor <- ConsoleColor.DarkGray
                         printf " %-s" words
-                        Console.ForegroundColor <- color
+
+                        Console.ForegroundColor <- ConsoleColor.Gray
+                        printf " %-s" metaDescription
 
                         Console.ForegroundColor <- ConsoleColor.Yellow
-                        printf " %-s" metaDescription
+                        printf " %-s" mxStr
+
                         Console.ForegroundColor <- color
 
                         Console.WriteLine())
