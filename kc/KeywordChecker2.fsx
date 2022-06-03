@@ -105,8 +105,17 @@ let client = new LookupClient(lookupOptions)
 let mxExchange (client: LookupClient) (hostName: string) =
     async {
         if not (String.IsNullOrEmpty(hostName)) then
+            let host =
+                if (hostName.StartsWith("http")) then
+                    match (Uri.TryCreate(hostName, UriKind.Absolute)) with
+                    | true, uri -> uri.Authority
+                    | _ -> hostName
+                else
+                    hostName
+
+
             let! r =
-                client.QueryAsync(hostName, QueryType.MX)
+                client.QueryAsync(host, QueryType.MX)
                 |> Async.AwaitTask
 
             return
