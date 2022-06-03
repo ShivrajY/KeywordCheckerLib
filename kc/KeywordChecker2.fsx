@@ -93,11 +93,15 @@ let SetUpChromeAndGetBrowser () =
 //Arguments
 let args = fsi.CommandLineArgs |> Array.tail
 
-//----------- Mx Records --------------
+//----------- MxRecords ------------------
+
 let lookupOptions = new LookupClientOptions()
 lookupOptions.ContinueOnDnsError <- true
 let client = new LookupClient(lookupOptions)
 
+/// <summary>
+/// Gets the MX records for a domain
+/// </summary>
 let mxExchange (client: LookupClient) (hostName: string) =
     async {
         if not (String.IsNullOrEmpty(hostName)) then
@@ -117,6 +121,8 @@ let mxExchange (client: LookupClient) (hostName: string) =
     }
 
 let getMxExchange = mxExchange client
+
+//-----------MxRecords End ----------------
 
 /// <summary>
 /// Setup the browser
@@ -144,10 +150,9 @@ let getLanguage (html: string) =
 
 type InputToParse =
     | Attribute of tag: string * attribute: string
-    | Meta of name: string
+    | Meta
 
 let pageLanguage = Attribute(tag = "html", attribute = "lang")
-let metaDescription = Meta(name = "description")
 
 /// <summary>
 /// Parse the page
@@ -171,11 +176,17 @@ let parseData (html: string) (inputsToParse: InputToParse list) =
                         else
                             let v = a.GetAttribute(attribute)
                             if (v = null) then String.Empty else v
-                    | Meta (name) ->
-                        let m = doc.QuerySelector($"meta[name={quote}{name}{quote}]")
+                    | Meta ->
+                        let m = doc.QuerySelector($"meta[name='description']")
 
                         if (m = null) then
-                            String.Empty
+                            let temp = doc.QuerySelector("meta[property='og:description']")
+
+                            if (temp = null) then
+                                String.Empty
+                            else
+                                let v = temp.GetAttribute("content")
+                                if (v = null) then String.Empty else v
                         else
                             let v = m.GetAttribute("content")
                             if (v = null) then String.Empty else v)
@@ -293,7 +304,7 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
             [| "keywords"
                "language"
                "meta-description"
-               "mx-exchange"
+               "mxlookup"
                yield! h |]
         | None -> [||]
 
@@ -314,7 +325,7 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
                     let! html = fetchUrl browser (url)
                     let words = checkWords (html)
                     let! language = getLanguage (html)
-                    let! data = parseData (html) (pageLanguage :: metaDescription :: [])
+                    let! data = parseData (html) (pageLanguage :: Meta :: [])
                     let! mxRecord = getMxExchange website
 
                     let pl, metaDescription =
@@ -326,7 +337,7 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
 
                     let mxStr =
                         match mxRecord with
-                        | Some x -> x.Value
+                        | Some x -> sprintf "%A" x
                         | None -> String.Empty
 
                     let arr =
@@ -369,8 +380,7 @@ let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
 
                         Console.ForegroundColor <- ConsoleColor.Yellow
                         printf " %-s" mxStr
-
-                        Console.ForegroundColor <- color
+                        //Console.ForegroundColor <- color
 
                         Console.WriteLine())
 
