@@ -1,21 +1,22 @@
 #r "nuget: FSharp.Data"
 #r "nuget: PuppeteerSharp"
 #r "nuget: AngleSharp"
+#r "nuget: DnsClient"
 
 open System
 open System.Text
 open System.Text.RegularExpressions
 open System.Linq
-open FSharp.Data
 open System.Threading
-open PuppeteerSharp
 open System.IO
-open AngleSharp
-open AngleSharp.Dom
-open AngleSharp.Io
-open AngleSharp.Html.Parser
 open System.Net
 open System.Net.Http
+
+open FSharp.Data
+open PuppeteerSharp
+open AngleSharp
+open AngleSharp.Html.Parser
+open DnsClient
 (******************************************************************************)
 let columnName = "companyhomepageurl"
 
