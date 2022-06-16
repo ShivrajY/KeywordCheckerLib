@@ -190,68 +190,6 @@ module SiteStats =
         else
             "\"\""
 
-    let getLanguage (html: string) =
-        async {
-            if not (String.IsNullOrEmpty(html)) then
-                let m =
-                    Regex.Match(
-                        html,
-                        "lang=\"(.*?)\"",
-                        RegexOptions.IgnoreCase
-                        ||| RegexOptions.Singleline
-                    )
-
-                if (m.Success) then
-                    return m.Groups[1].Value
-                else
-                    return String.Empty
-            else
-                return String.Empty
-        }
-
-    type InputToParse =
-        | Attribute of tag: string * attribute: string
-        | Meta
-
-    let parseData (html: string) (inputsToParse: InputToParse list) =
-        async {
-            if not (String.IsNullOrEmpty(html)) then
-                use context = BrowsingContext.New(config)
-                let parser = context.GetService<IHtmlParser>()
-                use! doc = parser.ParseDocumentAsync(html) |> Async.AwaitTask
-
-                let data =
-                    inputsToParse
-                    |> List.map (fun input ->
-                        match input with
-                        | Attribute (tag, attribute) ->
-                            let a = doc.QuerySelector($"{tag}[{attribute}]")
-
-                            if (a = null) then
-                                String.Empty
-                            else
-                                let v = a.GetAttribute(attribute)
-                                if (v = null) then String.Empty else v
-                        | Meta ->
-                            let m = doc.QuerySelector($"meta[name='description']")
-
-                            if (m = null) then
-                                let temp = doc.QuerySelector("meta[property='og:description']")
-
-                                if (temp = null) then
-                                    String.Empty
-                                else
-                                    let v = temp.GetAttribute("content")
-                                    if (v = null) then String.Empty else v
-                            else
-                                let v = m.GetAttribute("content")
-                                if (v = null) then String.Empty else v)
-
-                return data
-            else
-                return []
-        }
-
     let findWords (browser: Browser) (csv: CsvFile) (newFile: string) =
         counter <- 0
         let listOfRows = csv.Rows |> List.ofSeq
