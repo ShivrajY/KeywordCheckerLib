@@ -2,6 +2,7 @@
 #r "nuget: FSharp.Data"
 
 open System
+open System.Text
 open System.Linq
 open DnsClient
 
@@ -11,9 +12,17 @@ let client = new LookupClient(options)
 
 let getMxExchange (client: LookupClient) (hostName: string) =
     async {
+        //"https://www.actualhq.com"
+        let host =
+            hostName
+                .Replace("https://", String.Empty)
+                .Replace("http://", String.Empty)
+                .Replace("www.", String.Empty)
+                .Replace("/", String.Empty)
+
 
         let! r =
-            client.QueryAsync(hostName, QueryType.MX)
+            client.QueryAsync(host, QueryType.MX)
             |> Async.AwaitTask
 
         return
@@ -27,4 +36,7 @@ let getMxExchange (client: LookupClient) (hostName: string) =
 
 let testHost = getMxExchange client
 
-printfn "%A" (testHost "roofr.com" |> Async.RunSynchronously)
+printfn
+    "%A"
+    (testHost "https://www.actualhq.com"
+     |> Async.RunSynchronously)
