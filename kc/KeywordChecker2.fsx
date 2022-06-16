@@ -92,20 +92,7 @@ module Chrome =
 
             if not (String.IsNullOrEmpty(executablePath)) then
                 Console.WriteLine($"Attemping to start Chromium using executable path: {executablePath}")
-                let options = new LaunchOptions(Headless = false, ExecutablePath = executablePath)
-
-                options.Args <-
-                    [| "--disable-gpu"
-                       "--disable-infobars"
-                       "--disable-dev-shm-usage"
-                       "--disable-setuid-sandbox"
-                       "--ignore-certifcate-errors"
-                       "--ignore-certifcate-errors-spki-list"
-                       "--window-position=0,0" |]
-
-                options.DefaultViewport <- null
-                options.IgnoreHTTPSErrors <- true
-                options.IgnoredDefaultArgs <- [| "--enable-automation" |]
+                let options = new LaunchOptions(Headless = true, ExecutablePath = executablePath)
 
                 return! Puppeteer.LaunchAsync(options) |> Async.AwaitTask
             else
@@ -118,16 +105,13 @@ module Chrome =
             try
                 if not (String.IsNullOrWhiteSpace(url)) then
                     let! page = browser.NewPageAsync() |> Async.AwaitTask
+                    let timeout = int (TimeSpan.FromSeconds(60).TotalMilliseconds)
+                    page.DefaultNavigationTimeout <- timeout
+                    page.DefaultTimeout <- timeout
 
                     try
                         do!
-                            page.GoToAsync(
-                                url
-                            //,
-                            // waitUntil =
-                            //     [| WaitUntilNavigation.Networkidle2
-                            //        WaitUntilNavigation.DOMContentLoaded |]
-                            )
+                            page.GoToAsync(url, timeout, waitUntil = [| WaitUntilNavigation.DOMContentLoaded |])
                             |> Async.AwaitTask
                             |> Async.Ignore
 
@@ -310,7 +294,7 @@ module SiteStats =
                                     String.Format("{0}{1}{0}", quote, s))
 
                             let str = String.Join(seperators, arr)
-                            printfn "%A" str
+                            printfn ">>>>>>>>>> :: Failed To Load :: %A <<<<<<<<<<" website
                             return index, str
 
                         | Some (page, html) ->
